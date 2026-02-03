@@ -1,0 +1,13 @@
+.vom-logo__text {
+  font-size: 22px;
+  font-weight: 1000;
+  letter-spacing: -0.8px;
+  color: var(--vom-gray-800);
+  text-shadow: 1px 1px 0 var(--vom-gray-0), 2px 2px 0 var(--vom-pink-200);
+}
+
+.vomSocialStack {
+  display: grid;
+  gap: 12px;
+}
+
