@@ -1,0 +1,593 @@
+.vomMiniHome {
+  width: min(980px, 100%);
+  background: var(--vom-gray-0);
+  border-radius: var(--vom-radius-xl);
+  border: var(--vom-border);
+  box-shadow: var(--vom-shadow-hard), var(--vom-shadow-soft);
+  padding: 22px 22px 20px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.vomMiniHome__header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.vomMiniHome__titles {
+  display: grid;
+  gap: 4px;
+}
+
+.vomMiniHome__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.4px;
+  color: var(--vom-gray-800);
+}
+
+.vomMiniHome__subtitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--vom-gray-600);
+}
+
+.vomMiniHome__layout {
+  display: grid;
+  grid-template-columns: 1.2fr 1.5fr;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.vomMiniHome__left,
+.vomMiniHome__right {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vomMiniHome__profileCard {
+  border-radius: var(--vom-radius-lg);
+  border: 2px solid var(--vom-gray-200);
+  background: linear-gradient(135deg, #fefce8, #fce7f3);
+  padding: 12px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vomMiniHome__profileMain {
+  display: flex;
+  gap: 12px;
+}
+
+.vomMiniHome__avatarWrap {
+  flex: 0 0 auto;
+  width: 80px;
+  height: 80px;
+  border-radius: 22px;
+  border: 3px solid rgba(31, 41, 55, 0.9);
+  overflow: hidden;
+  box-shadow: 3px 3px 0 rgba(31, 41, 55, 0.4);
+  background: var(--vom-gray-100);
+}
+
+.vomMiniHome__avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vomMiniHome__profileMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.vomMiniHome__nameRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vomMiniHome__name {
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: -0.4px;
+}
+
+.vomMiniHome__bomBomBadge {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 2px solid var(--vom-pink-300);
+  background: var(--vom-pink-50);
+  color: var(--vom-gray-700);
+}
+
+.vomMiniHome__intro {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--vom-gray-700);
+}
+
+.vomMiniHome__actions {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.vomMiniHome__touchBtn {
+  height: 34px;
+  padding-inline: 12px;
+  font-size: 12px;
+}
+
+.vomMiniHome__editBtn {
+  height: 34px;
+  padding-inline: 12px;
+  font-size: 12px;
+}
+
+.vomMiniHome__interests {
+  border-radius: var(--vom-radius-md);
+  border: 2px dashed rgba(148, 163, 184, 0.9);
+  background: rgba(255, 255, 255, 0.8);
+  padding: 8px 9px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vomMiniHome__interestsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.vomMiniHome__sectionTitle {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--vom-gray-700);
+}
+
+.vomMiniHome__chipHelper {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--vom-gray-500);
+}
+
+.vomMiniHome__interestsEmpty {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--vom-gray-500);
+}
+
+.vomMiniHome__pillRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.vomMiniHome__chip {
+  border-radius: 999px;
+  border: 2px solid var(--vom-gray-200);
+  background: var(--vom-gray-0);
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--vom-gray-700);
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease,
+    border-color 120ms ease, color 120ms ease;
+}
+
+.vomMiniHome__chip.isSelected,
+.vomMiniHome__chip.vomMiniHome__chip--selected {
+  background: var(--vom-pink-100);
+  border-color: var(--vom-pink-300);
+  color: var(--vom-pink-700, #9d174d);
+  box-shadow: 2px 2px 0 rgba(248, 113, 113, 0.6);
+}
+
+.vomMiniHome__chip.isDisabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.vomMiniHome__sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.vomMiniHome__sectionHint {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--vom-gray-500);
+}
+
+.vomMiniHome__newFeed {
+  border-radius: var(--vom-radius-lg);
+  border: 2px solid var(--vom-gray-200);
+  background: var(--vom-gray-0);
+  padding: 10px 10px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vomMiniHome__newFeedTextarea {
+  width: 100%;
+  min-height: 70px;
+  resize: vertical;
+  border-radius: var(--vom-radius-md);
+  border: 2px solid var(--vom-gray-200);
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--vom-font);
+  color: var(--vom-gray-800);
+  background: var(--vom-gray-50);
+}
+
+.vomMiniHome__newFeedTextarea::placeholder {
+  color: var(--vom-gray-400);
+}
+
+.vomMiniHome__newFeedControls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.vomMiniHome__fileLabel {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  border-radius: 999px;
+  border: 2px dashed var(--vom-gray-300);
+  background: var(--vom-gray-50);
+  cursor: pointer;
+}
+
+.vomMiniHome__fileLabel input[type='file'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.vomMiniHome__fileHint {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--vom-gray-500);
+}
+
+.vomMiniHome__newFeedPreviewRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.vomMiniHome__newFeedPreview {
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid var(--vom-gray-200);
+  background: var(--vom-gray-100);
+}
+
+.vomMiniHome__newFeedPreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vomMiniHome__newFeedFooter {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.vomMiniHome__newFeedBtn {
+  height: 34px;
+  padding-inline: 14px;
+  font-size: 12px;
+}
+
+.vomMiniHome__feedEmpty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--vom-gray-500);
+}
+
+.vomMiniHome__feedList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.vomMiniHome__feedItem {
+  border-radius: var(--vom-radius-md);
+  border: 2px solid var(--vom-gray-200);
+  background: var(--vom-gray-0);
+  padding: 8px 9px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vomMiniHome__feedHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vomMiniHome__feedAuthorAvatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid var(--vom-gray-300);
+}
+
+.vomMiniHome__feedAuthorAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vomMiniHome__feedAuthorMeta {
+  display: flex;
+  flex-direction: column;
+}
+
+.vomMiniHome__feedAuthorName {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.vomMiniHome__feedTime {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--vom-gray-500);
+}
+
+.vomMiniHome__feedPhotos {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.vomMiniHome__feedPhoto {
+  flex: 0 0 auto;
+  width: 90px;
+  height: 90px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 2px solid var(--vom-gray-200);
+  background: var(--vom-gray-100);
+}
+
+.vomMiniHome__feedPhoto img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vomMiniHome__feedContent {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--vom-gray-800);
+}
+
+.vomMiniHome__editDrawer {
+  position: absolute;
+  inset: auto 0 0 auto;
+  width: min(360px, 100%);
+  max-height: 100%;
+  transform: translateY(110%);
+  transition: transform 160ms ease-out;
+  pointer-events: none;
+}
+
+.vomMiniHome__editDrawer.isOpen {
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.vomMiniHome__editInner {
+  background: var(--vom-gray-0);
+  border-radius: 22px 22px 0 0;
+  border-top: var(--vom-border);
+  box-shadow: 0 -10px 25px rgba(15, 23, 42, 0.25);
+  padding: 12px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vomMiniHome__editHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.vomMiniHome__editClose {
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.vomMiniHome__editBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.vomMiniHome__editField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vomMiniHome__editLabelRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.vomMiniHome__editLabel {
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--vom-gray-700);
+}
+
+.vomMiniHome__editTextarea {
+  width: 100%;
+  resize: vertical;
+  border-radius: var(--vom-radius-md);
+  border: 2px solid var(--vom-gray-200);
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: var(--vom-font);
+  color: var(--vom-gray-800);
+  background: var(--vom-gray-50);
+}
+
+.vomMiniHome__editHint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--vom-gray-500);
+}
+
+.vomMiniHome__categoryList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vomMiniHome__categoryGroup {
+  border-radius: 12px;
+  border: 2px solid var(--vom-gray-100);
+  background: var(--vom-gray-50);
+  padding: 6px 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vomMiniHome__categoryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.vomMiniHome__categoryBadge {
+  font-size: 10px;
+  font-weight: 900;
+  border-radius: 999px;
+  padding: 2px 7px;
+  border: 2px solid var(--vom-gray-200);
+  background: var(--vom-gray-0);
+}
+
+.vomMiniHome__categoryBadge.isDigital {
+  border-color: #4ade80;
+  background: #ecfdf5;
+}
+
+.vomMiniHome__categoryBadge.isCreative {
+  border-color: #fb7185;
+  background: #fef2f2;
+}
+
+.vomMiniHome__categoryBadge.isLifestyle {
+  border-color: #38bdf8;
+  background: #eff6ff;
+}
+
+.vomMiniHome__categoryBadge.isHobby {
+  border-color: #f97316;
+  background: #fff7ed;
+}
+
+.vomMiniHome__categoryBadge.isMusic {
+  border-color: #6366f1;
+  background: #eef2ff;
+}
+
+.vomMiniHome__categoryBadge.isLearning {
+  border-color: #22c55e;
+  background: #ecfdf3;
+}
+
+.vomMiniHome__editFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.vomMiniHome__editFooterBtn {
+  height: 34px;
+  padding-inline: 13px;
+  font-size: 12px;
+}
+
+@media (max-width: 880px) {
+  .vomMiniHome {
+    padding-inline: 16px;
+  }
+
+  .vomMiniHome__layout {
+    grid-template-columns: 1fr;
+  }
+
+  .vomMiniHome__feedList {
+    max-height: 300px;
+  }
+}
+
+@media (max-width: 600px) {
+  .vomMiniHome__header {
+    gap: 8px;
+  }
+
+  .vomMiniHome__title {
+    font-size: 19px;
+  }
+
+  .vomMiniHome__profileMain {
+    flex-direction: column;
+  }
+
+  .vomMiniHome__avatarWrap {
+    width: 72px;
+    height: 72px;
+  }
+}
+

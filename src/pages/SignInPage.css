@@ -11,3 +11,10 @@
   gap: 12px;
 }
 
+.vomSignIn__serverError {
+  margin-top: 12px;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgb(239, 68, 68);
+}
+

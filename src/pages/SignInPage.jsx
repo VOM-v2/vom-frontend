@@ -4,6 +4,7 @@ import VomInput from '../components/VomInput';
 import VomButton from '../components/VomButton';
 import SocialButton from '../components/SocialButton';
 import { buildBackendUrl } from '../config/backend';
+import { getXsrfToken } from '../utils/cookies';
 import './SignInPage.css';
 
 const GOOGLE_ICON_DATA_URI =
@@ -15,12 +16,32 @@ const KAKAO_ICON_DATA_URI =
 const SignInPage = () => {
   const navigate = useNavigate();
 
-  // "sign" naming for sign-in variables
   const [signinForm, setSigninForm] = useState({
     signinEmail: '',
     signinPassword: '',
   });
   const [signinErrors, setSigninErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const fetchXsrfToken = async () => {
+    try {
+      const url = buildBackendUrl('/api/auth/sign-in');
+      const response = await fetch(url, {
+        method: 'GET',
+        credentials: 'include',
+        mode: 'cors',
+      });
+      
+      // Token should be set in cookie by the response
+      if (response.ok) {
+        return getXsrfToken();
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[vom] Failed to fetch XSRF token', error);
+    }
+    return null;
+  };
 
   const isEmailLike = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
@@ -62,16 +83,104 @@ const SignInPage = () => {
     return Object.keys(next).length === 0;
   };
 
-  const onSigninSubmit = (e) => {
+  const onSigninSubmit = async (e) => {
     e.preventDefault();
     if (!validateSignin()) return;
 
-    // 프로젝트 제약조건: 현재는 API 연동 전(정적 UI). 추후 sign-in API로 교체.
-    console.log('[vom] sign-in submit', signinForm);
+    try {
+      setIsSubmitting(true);
+      setSigninErrors((prev) => {
+        const next = { ...prev };
+        delete next.server;
+        return next;
+      });
+
+      const url = buildBackendUrl('/api/auth/sign-in');
+      
+      let xsrfToken = getXsrfToken();
+      
+      if (!xsrfToken) {
+        xsrfToken = await fetchXsrfToken();
+      }
+      
+      const formData = new FormData();
+      formData.append('username', signinForm.signinEmail);
+      formData.append('password', signinForm.signinPassword);
+      
+      const headers = {
+        'Accept': 'application/json, text/plain, */*',
+      };
+      
+      if (xsrfToken) {
+        headers['X-XSRF-TOKEN'] = xsrfToken;
+      }
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: formData,
+        credentials: 'include',
+        mode: 'cors',
+      });
+
+      // Check if response is ok (status 200-299)
+      if (response.ok) {
+        try {
+          const data = await response.json();
+          if (data.token) {
+          }
+          if (data.user) {
+          }
+        } catch (parseError) {
+          console.log('[vom] sign-in success, no response body');
+        }
+        
+        // 로그인 성공 시 미니홈피 화면으로 이동
+        navigate('/mini-home', { replace: true });
+        return;
+      }
+
+      let errorMessage = '로그인에 실패했어요. 아이디와 비밀번호를 다시 확인해주세요.';
+      
+      try {
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const data = await response.json();
+          console.log('[vom] Error response:', data);
+          errorMessage = data?.message || data?.error || errorMessage;
+        } else {
+          const text = await response.text();
+          console.log('[vom] Error response text:', text);
+          if (text) {
+            errorMessage = text;
+          }
+        }
+      } catch (parseError) {
+        console.error('[vom] failed to parse error response', parseError);
+      }
+
+      setSigninErrors((prev) => ({
+        ...prev,
+        server: errorMessage,
+      }));
+    } catch (error) {
+      console.error('[vom] sign-in error', error);
+      
+      let errorMessage = '서버와 통신 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.';
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        errorMessage = '네트워크 연결을 확인해주세요.';
+      }
+      
+      setSigninErrors((prev) => ({
+        ...prev,
+        server: errorMessage,
+      }));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const goOauth = (provider) => {
-    // 백엔드 베이스 URL은 config/backend에서 관리 (로컬: 8080, 배포: 동일 오리진 등)
     window.location.href = buildBackendUrl(`/oauth2/authorization/${provider}`);
   };
 
@@ -115,10 +224,21 @@ const SignInPage = () => {
             />
           </div>
 
-          <VomButton type="submit" variant="primary" fullWidth disabled={!isSigninValid}>
+          <VomButton
+            type="submit"
+            variant="primary"
+            fullWidth
+            disabled={!isSigninValid || isSubmitting}
+          >
             로그인
           </VomButton>
         </form>
+
+        {signinErrors.server ? (
+          <p className="vomSignIn__serverError" role="alert">
+            {signinErrors.server}
+          </p>
+        ) : null}
 
         <div className="vom-divider">
           <span>또는</span>
