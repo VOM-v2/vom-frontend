@@ -1,0 +1,87 @@
+.vomInput {
+  width: 100%;
+  display: grid;
+  gap: 8px;
+}
+
+.vomInput__label {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--vom-gray-700);
+  letter-spacing: -0.2px;
+}
+
+.vomInput__box {
+  background: var(--vom-gray-0);
+  border-radius: var(--vom-radius-md);
+  border: 2px solid var(--vom-gray-200);
+  box-shadow: 0 2px 4px rgba(55, 65, 81, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.vomInput__box:focus-within {
+  border-color: rgba(236, 72, 153, 0.75);
+  box-shadow: 0 0 0 4px rgba(236, 72, 153, 0.18);
+}
+
+.vomInput__box.isError {
+  border-color: rgba(239, 68, 68, 0.9);
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.12);
+}
+
+.vomInput__icon {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  color: var(--vom-gray-500);
+  flex: 0 0 auto;
+}
+
+.vomInput__native {
+  flex: 1;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--vom-gray-800);
+  min-width: 0;
+}
+
+.vomInput__native::placeholder {
+  color: var(--vom-gray-400);
+  font-weight: 700;
+}
+
+.vomInput__toggle {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 2px solid var(--vom-gray-200);
+  background: linear-gradient(180deg, var(--vom-gray-0), var(--vom-gray-50));
+  color: var(--vom-gray-600);
+  cursor: pointer;
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.vomInput__toggle:hover {
+  transform: translate(1px, 1px);
+  border-color: rgba(236, 72, 153, 0.35);
+}
+
+.vomInput__error {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgb(239, 68, 68);
+}
+
