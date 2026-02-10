@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import VomInput from '../components/VomInput';
 import VomButton from '../components/VomButton';
 import SocialButton from '../components/SocialButton';
@@ -15,6 +15,8 @@ const KAKAO_ICON_DATA_URI =
 
 const SignInPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const successMessage = location.state?.message;
 
   const [signinForm, setSigninForm] = useState({
     signinEmail: '',
@@ -197,12 +199,18 @@ const SignInPage = () => {
           <p className="vom-subtitle">레트로 감성 화상채팅 + 미니홈피</p>
         </header>
 
+        {successMessage ? (
+          <p className="vomSignIn__successMessage" role="status">
+            {successMessage}
+          </p>
+        ) : null}
+
         <form className="vom-form" onSubmit={onSigninSubmit}>
           <div className="vom-field">
             <VomInput
               label="아이디"
               type="email"
-              placeholder="codeit@codeit.com"
+              placeholder="이메일"
               value={signinForm.signinEmail}
               onChange={onSigninChange('signinEmail')}
               error={signinErrors.signinEmail}

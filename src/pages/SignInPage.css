@@ -18,3 +18,10 @@
   color: rgb(239, 68, 68);
 }
 
+.vomSignIn__successMessage {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--vom-pink-600);
+}
+
