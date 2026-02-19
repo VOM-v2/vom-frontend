@@ -25,9 +25,9 @@ const SignUpPage = () => {
   const [signupErrors, setSignupErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const fetchXsrfToken = async () => {
+  const fetchCsrfToken = async () => {
     try {
-      const url = buildBackendUrl('/api/auth/sign-in');
+      const url = buildBackendUrl('/api/auth/csrf-token');
       const response = await fetch(url, {
         method: 'GET',
         credentials: 'include',
@@ -37,7 +37,7 @@ const SignUpPage = () => {
         return getXsrfToken();
       }
     } catch (error) {
-      console.error('[vom] Failed to fetch XSRF token', error);
+      console.error('[vom] Failed to fetch CSRF token', error);
     }
     return null;
   };
@@ -128,7 +128,7 @@ const SignUpPage = () => {
 
       let xsrfToken = getXsrfToken();
       if (!xsrfToken) {
-        xsrfToken = await fetchXsrfToken();
+        xsrfToken = await fetchCsrfToken();
       }
 
       const body = {

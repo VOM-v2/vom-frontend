@@ -5,6 +5,7 @@ import VomButton from '../components/VomButton';
 import SocialButton from '../components/SocialButton';
 import { buildBackendUrl } from '../config/backend';
 import { getXsrfToken } from '../utils/cookies';
+import { setAuthFromResponse, getNickname } from '../utils/authStorage';
 import './SignInPage.css';
 
 const GOOGLE_ICON_DATA_URI =
@@ -25,22 +26,20 @@ const SignInPage = () => {
   const [signinErrors, setSigninErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const fetchXsrfToken = async () => {
+  const fetchCsrfToken = async () => {
     try {
-      const url = buildBackendUrl('/api/auth/sign-in');
+      const url = buildBackendUrl('/api/auth/csrf-token');
       const response = await fetch(url, {
         method: 'GET',
         credentials: 'include',
         mode: 'cors',
       });
-      
-      // Token should be set in cookie by the response
       if (response.ok) {
         return getXsrfToken();
       }
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error('[vom] Failed to fetch XSRF token', error);
+      console.error('[vom] Failed to fetch CSRF token', error);
     }
     return null;
   };
@@ -100,9 +99,8 @@ const SignInPage = () => {
       const url = buildBackendUrl('/api/auth/sign-in');
       
       let xsrfToken = getXsrfToken();
-      
       if (!xsrfToken) {
-        xsrfToken = await fetchXsrfToken();
+        xsrfToken = await fetchCsrfToken();
       }
       
       const formData = new FormData();
@@ -127,18 +125,21 @@ const SignInPage = () => {
 
       // Check if response is ok (status 200-299)
       if (response.ok) {
+        const accessTokenFromHeader = response.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
         try {
           const data = await response.json();
-          if (data.token) {
+          if (accessTokenFromHeader && !data?.accessToken) {
+            data.accessToken = accessTokenFromHeader;
           }
-          if (data.user) {
+          setAuthFromResponse(data);
+        } catch (_) {
+          if (accessTokenFromHeader) {
+            setAuthFromResponse({ accessToken: accessTokenFromHeader });
           }
-        } catch (parseError) {
-          console.log('[vom] sign-in success, no response body');
         }
-        
-        // 로그인 성공 시 미니홈피 화면으로 이동
-        navigate('/mini-home', { replace: true });
+
+        const nickname = getNickname();
+        navigate(nickname ? `/mini-home/${encodeURIComponent(nickname)}` : '/mini-home', { replace: true });
         return;
       }
 

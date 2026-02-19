@@ -1,7 +1,18 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import VomButton from '../components/VomButton';
 import VomInput from '../components/VomInput';
+import { buildBackendUrl } from '../config/backend';
+import { getXsrfToken } from '../utils/cookies';
+import { getUserIdFromToken, getAccessToken, getNickname, clearAuth, setAuthFromResponse } from '../utils/authStorage';
 import './MiniHomePage.css';
+
+const MAX_SNAP_CONTENT = 20;
+
+/** 현재 로그인 사용자 ID (JWT payload에서 디코딩). 없으면 개발용 폴백 */
+function getCurrentUserId() {
+  return getUserIdFromToken() || '00000000-0000-0000-0000-000000000001';
+}
 
 const INTEREST_CATEGORIES = [
   {
@@ -78,7 +89,6 @@ const INTEREST_CATEGORIES = [
 ];
 
 const MAX_INTERESTS = 5;
-const MAX_FEED_IMAGES = 5;
 
 const MOCK_PROFILE = {
   name: '봄봄이',
@@ -90,27 +100,35 @@ const MOCK_PROFILE = {
   interestIds: [1, 7, 12],
 };
 
-const MOCK_FEEDS = [
+/** 스냅 목록 초기값 (백엔드 GET /api/snaps/me 또는 /api/snaps?userId= 연동 후 교체) */
+const MOCK_SNAPS = [
   {
-    id: 1,
-    authorName: '봄봄이',
-    createdAt: '방금 전',
-    content: '오늘 새로 산 키보드로 밤새 코딩했어요 💻',
-    photos: [
+    id: '1',
+    content: '오늘 새 키보드로 밤새 코딩 💻',
+    imageUrl:
       'https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?auto=compress&cs=tinysrgb&w=400',
-      'https://images.pexels.com/photos/2047905/pexels-photo-2047905.jpeg?auto=compress&cs=tinysrgb&w=400',
-    ],
+    createdAt: '2025-02-18T12:00:00',
   },
   {
-    id: 2,
-    authorName: '봄봄이',
-    createdAt: '어제',
+    id: '2',
     content: '카페에서 사이드 프로젝트 구상 중 ☕',
-    photos: [
+    imageUrl:
       'https://images.pexels.com/photos/374885/pexels-photo-374885.jpeg?auto=compress&cs=tinysrgb&w=400',
-    ],
+    createdAt: '2025-02-17T15:30:00',
   },
 ];
+
+function formatDateBack(dateStr) {
+  try {
+    const d = new Date(dateStr);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}.${m}.${day}`;
+  } catch (_) {
+    return '';
+  }
+}
 
 function useInterestHelpers() {
   const flatKeywords = useMemo(
@@ -126,13 +144,36 @@ function useInterestHelpers() {
 
 const MiniHomePage = () => {
   const { flatKeywords, getLabelById } = useInterestHelpers();
+  const params = useParams();
+  const navigate = useNavigate();
+  const pageNickname = params.nickname ? decodeURIComponent(params.nickname) : null;
+  const currentUserNickname = getNickname();
+  const isMyAccount = !pageNickname || pageNickname === currentUserNickname;
+
+  // /mini-home 으로 들어온 경우 본인 닉네임으로 URL 교체
+  useEffect(() => {
+    if (pageNickname == null && currentUserNickname) {
+      navigate(`/mini-home/${encodeURIComponent(currentUserNickname)}`, { replace: true });
+    }
+  }, [pageNickname, currentUserNickname, navigate]);
 
   const [profile, setProfile] = useState(MOCK_PROFILE);
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [feeds, setFeeds] = useState(MOCK_FEEDS);
-  const [newFeedContent, setNewFeedContent] = useState('');
-  const [newFeedImages, setNewFeedImages] = useState([]);
-  const [isNewFeedOpen, setIsNewFeedOpen] = useState(false);
+  const [snaps, setSnaps] = useState(MOCK_SNAPS);
+  const [newSnapContent, setNewSnapContent] = useState('');
+  const [newSnapImage, setNewSnapImage] = useState(null);
+  const [isNewSnapOpen, setIsNewSnapOpen] = useState(false);
+  const [snapSubmitError, setSnapSubmitError] = useState(null);
+  const [isSnapSubmitting, setIsSnapSubmitting] = useState(false);
+  const [newlyAddedIds, setNewlyAddedIds] = useState(new Set());
+
+  useEffect(() => {
+    if (newlyAddedIds.size === 0) return;
+    const t = setTimeout(() => {
+      setNewlyAddedIds(new Set());
+    }, 3200);
+    return () => clearTimeout(t);
+  }, [newlyAddedIds]);
 
   const selectedInterests = useMemo(
     () => flatKeywords.filter((k) => profile.interestIds.includes(k.id)),
@@ -168,34 +209,109 @@ const MiniHomePage = () => {
     }));
   };
 
-  const handleNewFeedImagesChange = (e) => {
-    const files = Array.from(e.target.files || []);
-    const limitedFiles = files.slice(0, MAX_FEED_IMAGES);
-    const previews = limitedFiles.map((file) => ({
-      file,
-      previewUrl: URL.createObjectURL(file),
-    }));
-    setNewFeedImages(previews);
+  const handleNewSnapImageChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setNewSnapImage(null);
+      return;
+    }
+    setNewSnapImage({ file, previewUrl: URL.createObjectURL(file) });
   };
 
-  const handleCreateFeed = (e) => {
-    e.preventDefault();
-    if (!newFeedContent.trim() && newFeedImages.length === 0) return;
+  const handleCreateSnap = useCallback(
+    async (e) => {
+      e.preventDefault();
+      if (!newSnapImage?.file) return;
+      const content = newSnapContent.trim().slice(0, MAX_SNAP_CONTENT);
 
-    const nextFeed = {
-      id: Date.now(),
-      authorName: profile.name || MOCK_PROFILE.name,
-      createdAt: '방금 전',
-      content: newFeedContent.trim(),
-      photos: newFeedImages.map((img) => img.previewUrl),
-    };
+      setSnapSubmitError(null);
+      setIsSnapSubmitting(true);
 
-    setFeeds((prev) => [nextFeed, ...prev]);
-    setNewFeedContent('');
-    setNewFeedImages([]);
+      try {
+        const xsrfToken = await getXsrfToken();
+        const url = buildBackendUrl('/api/snaps/me');
+        const formData = new FormData();
+        const request = { content: content || null };
+        formData.append(
+          'request',
+          new Blob([JSON.stringify(request)], { type: 'application/json' })
+        );
+        formData.append('image', newSnapImage.file);
 
-    // TODO: 백엔드 연동 시 여기에서 실제 업로드 API 호출
-  };
+        const headers = {};
+        const accessToken = getAccessToken();
+        if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+        if (xsrfToken) headers['X-XSRF-TOKEN'] = xsrfToken;
+
+        let response = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: formData,
+          credentials: 'include',
+          mode: 'cors',
+        });
+
+        if (response.status === 401) {
+          const refreshRes = await fetch(buildBackendUrl('/api/auth/refresh'), {
+            method: 'POST',
+            credentials: 'include',
+            mode: 'cors',
+          });
+          if (refreshRes.ok) {
+            try {
+              const refreshData = await refreshRes.json();
+              setAuthFromResponse(refreshData);
+              const newToken = refreshData?.accessToken ?? getAccessToken();
+              if (newToken) {
+                headers['Authorization'] = `Bearer ${newToken}`;
+                response = await fetch(url, {
+                  method: 'POST',
+                  headers,
+                  body: formData,
+                  credentials: 'include',
+                  mode: 'cors',
+                });
+              }
+            } catch (_) {
+              // ignore
+            }
+          }
+        }
+
+        if (!response.ok) {
+          const contentType = response.headers.get('content-type');
+          let message = '스냅 등록에 실패했어요.';
+          if (contentType && contentType.includes('application/json')) {
+            const data = await response.json().catch(() => ({}));
+            message = data?.message || data?.error || message;
+          }
+          setSnapSubmitError(message);
+          return;
+        }
+
+        const raw = await response.json();
+        const created = {
+          id: raw.id,
+          content: raw.content ?? '',
+          imageUrl: raw.imageUrl ?? raw.imageURL ?? raw.image_url ?? '',
+          createdAt: raw.createdAt ?? raw.created_at ?? new Date().toISOString(),
+        };
+        setSnaps((prev) => [created, ...prev]);
+        setNewlyAddedIds((prev) => new Set(prev).add(created.id));
+        setNewSnapContent('');
+        setNewSnapImage((prev) => {
+          if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+          return null;
+        });
+        setIsNewSnapOpen(false);
+      } catch (err) {
+        setSnapSubmitError(err?.message || '스냅 등록 중 오류가 났어요.');
+      } finally {
+        setIsSnapSubmitting(false);
+      }
+    },
+    [newSnapContent, newSnapImage]
+  );
 
   const handleSaveProfile = () => {
     // TODO: 실제 백엔드 연동 시, 아래와 같이 관심 키워드를 아이디 배열로 전송
@@ -272,10 +388,22 @@ const MiniHomePage = () => {
                     <VomButton
                       variant="secondary"
                       className="vomMiniHome__logoutBtn"
-                      onClick={() => {
-                        // TODO: 실제 로그아웃 API 연동 시 교체
-                        // eslint-disable-next-line no-console
-                        console.log('[vom] logout clicked');
+                      onClick={async () => {
+                        try {
+                          const url = buildBackendUrl('/api/auth/sign-out');
+                          const token = getAccessToken();
+                          const headers = {};
+                          if (token) headers['Authorization'] = `Bearer ${token}`;
+                          await fetch(url, {
+                            method: 'POST',
+                            headers,
+                            credentials: 'include',
+                            mode: 'cors',
+                          });
+                        } catch (_) {
+                          // ignore
+                        }
+                        clearAuth();
                         window.location.href = '/sign-in';
                       }}
                     >
@@ -311,142 +439,129 @@ const MiniHomePage = () => {
               </div>
             </div>
 
-            <div className="vomMiniHome__newFeedWrapper">
-              <div className="vomMiniHome__sectionHeader">
-                <span className="vomMiniHome__sectionTitle">새 피드</span>
-                <span className="vomMiniHome__sectionHint">
-                  사진은 최대 {MAX_FEED_IMAGES}장까지 등록할 수 있어요
-                </span>
-              </div>
-
-              {!isNewFeedOpen ? (
-                <div className="vomMiniHome__newFeedClosed">
-                  <VomButton
-                    variant="primary"
-                    className="vomMiniHome__newFeedToggleBtn"
-                    onClick={() => setIsNewFeedOpen(true)}
-                  >
-                    피드 추가
-                  </VomButton>
+            {isMyAccount && (
+              <div className="vomMiniHome__newSnapWrapper">
+                <div className="vomMiniHome__sectionHeader">
+                  <span className="vomMiniHome__sectionTitle">새 스냅</span>
+                  <span className="vomMiniHome__sectionHint">
+                    사진 1장 + 한 줄 메모 (최대 {MAX_SNAP_CONTENT}자)
+                  </span>
                 </div>
-              ) : (
-                <form
-                  className="vomMiniHome__newFeed"
-                  onSubmit={(e) => {
-                    handleCreateFeed(e);
-                    setIsNewFeedOpen(false);
-                  }}
-                >
-                  <textarea
-                    className="vomMiniHome__newFeedTextarea"
-                    placeholder="오늘 있었던 일을 짧게 남겨보세요 ✎"
-                    value={newFeedContent}
-                    onChange={(e) => setNewFeedContent(e.target.value)}
-                  />
 
-                  <div className="vomMiniHome__newFeedControls">
-                    <label className="vomMiniHome__fileLabel">
-                      사진 선택
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={handleNewFeedImagesChange}
-                      />
-                    </label>
-                    <span className="vomMiniHome__fileHint">
-                      선택된 사진 {newFeedImages.length}/{MAX_FEED_IMAGES}
-                    </span>
-                  </div>
-
-                  {newFeedImages.length > 0 && (
-                    <div className="vomMiniHome__newFeedPreviewRow">
-                      {newFeedImages.map((img, idx) => (
-                        <div
-                          className="vomMiniHome__newFeedPreview"
-                          key={img.previewUrl || idx}
-                        >
-                          <img src={img.previewUrl} alt="새 피드 미리보기" />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="vomMiniHome__newFeedFooter">
+                {!isNewSnapOpen ? (
+                  <div className="vomMiniHome__newSnapClosed">
                     <VomButton
-                      type="button"
-                      variant="secondary"
-                      className="vomMiniHome__newFeedCancelBtn"
-                      onClick={() => {
-                        setIsNewFeedOpen(false);
-                        setNewFeedContent('');
-                        setNewFeedImages([]);
-                      }}
-                    >
-                      취소
-                    </VomButton>
-                    <VomButton
-                      type="submit"
                       variant="primary"
-                      className="vomMiniHome__newFeedBtn"
-                      disabled={
-                        !newFeedContent.trim() && newFeedImages.length === 0
-                      }
+                      className="vomMiniHome__newSnapToggleBtn"
+                      onClick={() => setIsNewSnapOpen(true)}
                     >
-                      피드 등록하기
+                      스냅 추가
                     </VomButton>
                   </div>
-                </form>
-              )}
-            </div>
+                ) : (
+                  <form
+                    className="vomMiniHome__newSnap"
+                    onSubmit={handleCreateSnap}
+                  >
+                    <div className="vomMiniHome__newSnapControls">
+                      <label className="vomMiniHome__fileLabel">
+                        사진 1장 선택
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleNewSnapImageChange}
+                        />
+                      </label>
+                      {newSnapImage && (
+                        <div className="vomMiniHome__newSnapPreview">
+                          <img src={newSnapImage.previewUrl} alt="스냅 미리보기" />
+                        </div>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      className="vomMiniHome__newSnapMemo"
+                      placeholder="한 줄 메모 (최대 20자)"
+                      maxLength={MAX_SNAP_CONTENT}
+                      value={newSnapContent}
+                      onChange={(e) => setNewSnapContent(e.target.value)}
+                    />
+                    <span className="vomMiniHome__newSnapCount">
+                      {newSnapContent.length}/{MAX_SNAP_CONTENT}
+                    </span>
+                    {snapSubmitError && (
+                      <p className="vomMiniHome__newSnapError" role="alert">
+                        {snapSubmitError}
+                      </p>
+                    )}
+                    <div className="vomMiniHome__newSnapFooter">
+                      <VomButton
+                        type="button"
+                        variant="secondary"
+                        className="vomMiniHome__newSnapCancelBtn"
+                        onClick={() => {
+                          setIsNewSnapOpen(false);
+                          setNewSnapContent('');
+                          setNewSnapImage((prev) => {
+                            if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+                            return null;
+                          });
+                          setSnapSubmitError(null);
+                        }}
+                      >
+                        취소
+                      </VomButton>
+                      <VomButton
+                        type="submit"
+                        variant="primary"
+                        className="vomMiniHome__newSnapBtn"
+                        disabled={!newSnapImage?.file || isSnapSubmitting}
+                      >
+                        {isSnapSubmitting ? '등록 중…' : '스냅 등록하기'}
+                      </VomButton>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
           </section>
 
           <section className="vomMiniHome__right">
             <div className="vomMiniHome__sectionHeader">
-              <span className="vomMiniHome__sectionTitle">피드</span>
+              <span className="vomMiniHome__sectionTitle">스냅 앨범</span>
               <span className="vomMiniHome__sectionHint">
-                사진 1~{MAX_FEED_IMAGES}장과 내용말로 구성돼요
+                사진 1장 + 한 줄 메모, 수정 불가
               </span>
             </div>
 
-            {feeds.length === 0 ? (
-              <p className="vomMiniHome__feedEmpty">
-                아직 올라온 피드가 없어요. 첫 번째 피드를 남겨보세요!
+            {snaps.length === 0 ? (
+              <p className="vomMiniHome__snapEmpty">
+                아직 스냅이 없어요. 첫 스냅을 남겨보세요!
               </p>
             ) : (
-              <div className="vomMiniHome__feedList">
-                {feeds.map((feed) => (
-                  <article className="vomMiniHome__feedItem" key={feed.id}>
-                    <header className="vomMiniHome__feedHeader">
-                      <div className="vomMiniHome__feedAuthorAvatar">
-                        <img src={profile.avatarUrl} alt="" />
+              <div className="vomMiniHome__snapGrid">
+                {snaps.map((snap) => (
+                  <article
+                    className={`vomMiniHome__snapCard ${
+                      newlyAddedIds.has(snap.id) ? 'vomMiniHome__snapCard--develop' : ''
+                    }`}
+                    key={snap.id}
+                  >
+                    <div className="vomMiniHome__snapPolaroid">
+                      <div className="vomMiniHome__snapPhotoWrap">
+                        <img
+                          src={snap.imageUrl}
+                          alt=""
+                          className="vomMiniHome__snapPhoto"
+                        />
                       </div>
-                      <div className="vomMiniHome__feedAuthorMeta">
-                        <span className="vomMiniHome__feedAuthorName">
-                          {feed.authorName}
-                        </span>
-                        <span className="vomMiniHome__feedTime">
-                          {feed.createdAt}
-                        </span>
-                      </div>
-                    </header>
-
-                    {feed.photos?.length ? (
-                      <div className="vomMiniHome__feedPhotos">
-                        {feed.photos.slice(0, MAX_FEED_IMAGES).map((url, i) => (
-                          <div
-                            className="vomMiniHome__feedPhoto"
-                            key={`${feed.id}-${i}`}
-                          >
-                            <img src={url} alt={`피드 사진 ${i + 1}`} />
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-
-                    {feed.content ? (
-                      <p className="vomMiniHome__feedContent">{feed.content}</p>
-                    ) : null}
+                      <p className="vomMiniHome__snapMemo">
+                        {snap.content || '\u00A0'}
+                      </p>
+                      <span className="vomMiniHome__snapDateBack" aria-hidden="true">
+                        {formatDateBack(snap.createdAt)}
+                      </span>
+                    </div>
                   </article>
                 ))}
               </div>
