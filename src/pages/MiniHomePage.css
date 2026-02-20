@@ -411,6 +411,17 @@
   color: var(--vom-gray-500);
 }
 
+.vomMiniHome__snapError {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--vom-error, #b91c1c);
+}
+
+.vomMiniHome__snapMore {
+  margin-top: 12px;
+  text-align: center;
+}
+
 .vomMiniHome__snapGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));

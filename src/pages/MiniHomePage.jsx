@@ -100,23 +100,11 @@ const MOCK_PROFILE = {
   interestIds: [1, 7, 12],
 };
 
-/** 스냅 목록 초기값 (백엔드 GET /api/snaps/me 또는 /api/snaps?userId= 연동 후 교체) */
-const MOCK_SNAPS = [
-  {
-    id: '1',
-    content: '오늘 새 키보드로 밤새 코딩 💻',
-    imageUrl:
-      'https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?auto=compress&cs=tinysrgb&w=400',
-    createdAt: '2025-02-18T12:00:00',
-  },
-  {
-    id: '2',
-    content: '카페에서 사이드 프로젝트 구상 중 ☕',
-    imageUrl:
-      'https://images.pexels.com/photos/374885/pexels-photo-374885.jpeg?auto=compress&cs=tinysrgb&w=400',
-    createdAt: '2025-02-17T15:30:00',
-  },
-];
+/** 스냅 이미지 없을 때만 사용하는 중립 플레이스홀더 (회색 박스, 잘못된 이미지 노출 방지) */
+const SNAP_IMAGE_PLACEHOLDER =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Crect fill='%23e5e7eb' width='400' height='400'/%3E%3Ctext fill='%239ca3af' font-family='sans-serif' font-size='14' x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle'%3E이미지 없음%3C/text%3E%3C/svg%3E";
+
+const SNAP_PAGE_SIZE = 50;
 
 function formatDateBack(dateStr) {
   try {
@@ -148,7 +136,15 @@ const MiniHomePage = () => {
   const navigate = useNavigate();
   const pageUserId = params.userId ? decodeURIComponent(params.userId) : null;
   const currentUserId = getUserIdFromToken();
-  const isMyAccount = !pageUserId || pageUserId === currentUserId;
+  // '내 미니홈피' 판단: JWT의 sub(또는 userId)와 URL의 userId 비교. localStorage에 UUID 따로 저장하지 않고 토큰에서만 사용 (권장).
+  // UUID 문자열은 대소문자 차이로 불일치할 수 있으므로 소문자로 정규화해 비교.
+  const isMyAccount = (() => {
+    if (!pageUserId) return true;
+    if (!currentUserId) return false;
+    const a = String(pageUserId).toLowerCase().trim();
+    const b = String(currentUserId).toLowerCase().trim();
+    return a === b;
+  })();
 
   // /mini-home 으로 들어온 경우 본인 userId로 URL 교체
   useEffect(() => {
@@ -159,13 +155,85 @@ const MiniHomePage = () => {
 
   const [profile, setProfile] = useState(MOCK_PROFILE);
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [snaps, setSnaps] = useState(MOCK_SNAPS);
+  const [snaps, setSnaps] = useState([]);
+  const [snapNextCursor, setSnapNextCursor] = useState(null);
+  const [snapHasNext, setSnapHasNext] = useState(false);
+  const [isLoadingSnaps, setIsLoadingSnaps] = useState(false);
+  const [snapLoadError, setSnapLoadError] = useState(null);
   const [newSnapContent, setNewSnapContent] = useState('');
   const [newSnapImage, setNewSnapImage] = useState(null);
   const [isNewSnapOpen, setIsNewSnapOpen] = useState(false);
   const [snapSubmitError, setSnapSubmitError] = useState(null);
   const [isSnapSubmitting, setIsSnapSubmitting] = useState(false);
   const [newlyAddedIds, setNewlyAddedIds] = useState(new Set());
+
+  const targetUserId = pageUserId || currentUserId;
+
+  const fetchSnapsByUserId = useCallback(
+    async (userId, cursor = null, append = false) => {
+      if (!userId) return;
+      const params = new URLSearchParams();
+      params.set('userId', userId);
+      if (cursor != null && cursor !== '') params.set('cursor', String(cursor));
+      params.set('page', '0');
+      params.set('size', String(SNAP_PAGE_SIZE));
+      params.set('sort', 'createdAt,desc');
+      const url = `${buildBackendUrl('/api/snaps')}?${params.toString()}`;
+      const token = getAccessToken();
+      const headers = { Accept: 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+        credentials: 'include',
+        mode: 'cors',
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || `스냅 목록 조회 실패 (${response.status})`);
+      }
+      const data = await response.json();
+      const list = (data.content || []).map((item) => ({
+        id: item.id,
+        content: item.content ?? '',
+        createdAt: item.createdAt,
+        user: item.user,
+        imageUrl: item.snapImageUrl ?? item.imageUrl ?? SNAP_IMAGE_PLACEHOLDER,
+      }));
+      if (append) {
+        setSnaps((prev) => [...prev, ...list]);
+      } else {
+        setSnaps(list);
+      }
+      setSnapNextCursor(data.nextCursor ?? null);
+      setSnapHasNext(Boolean(data.hasNext));
+      return data;
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!targetUserId) return;
+    let cancelled = false;
+    setIsLoadingSnaps(true);
+    setSnapLoadError(null);
+    fetchSnapsByUserId(targetUserId, null, false)
+      .then(() => {
+        if (!cancelled) setSnapLoadError(null);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setSnapLoadError(err?.message || '스냅 목록을 불러오지 못했어요.');
+          setSnaps([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingSnaps(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [targetUserId, fetchSnapsByUserId]);
 
   useEffect(() => {
     if (newlyAddedIds.size === 0) return;
@@ -293,7 +361,8 @@ const MiniHomePage = () => {
         const created = {
           id: raw.id,
           content: raw.content ?? '',
-          imageUrl: raw.imageUrl ?? raw.imageURL ?? raw.image_url ?? '',
+          imageUrl:
+            raw.snapImageUrl ?? raw.imageUrl ?? raw.imageURL ?? raw.image_url ?? SNAP_IMAGE_PLACEHOLDER,
           createdAt: raw.createdAt ?? raw.created_at ?? new Date().toISOString(),
         };
         setSnaps((prev) => [created, ...prev]);
@@ -534,13 +603,21 @@ const MiniHomePage = () => {
               </span>
             </div>
 
-            {snaps.length === 0 ? (
+            {snapLoadError && (
+              <p className="vomMiniHome__snapError" role="alert">
+                {snapLoadError}
+              </p>
+            )}
+            {isLoadingSnaps && snaps.length === 0 ? (
+              <p className="vomMiniHome__snapEmpty">스냅을 불러오는 중…</p>
+            ) : snaps.length === 0 ? (
               <p className="vomMiniHome__snapEmpty">
                 아직 스냅이 없어요. 첫 스냅을 남겨보세요!
               </p>
             ) : (
-              <div className="vomMiniHome__snapGrid">
-                {snaps.map((snap) => (
+              <>
+                <div className="vomMiniHome__snapGrid">
+                  {snaps.map((snap) => (
                   <article
                     className={`vomMiniHome__snapCard ${
                       newlyAddedIds.has(snap.id) ? 'vomMiniHome__snapCard--develop' : ''
@@ -564,7 +641,28 @@ const MiniHomePage = () => {
                     </div>
                   </article>
                 ))}
-              </div>
+                </div>
+                {snapHasNext && (
+                  <div className="vomMiniHome__snapMore">
+                    <VomButton
+                      variant="secondary"
+                      disabled={isLoadingSnaps}
+                      onClick={() => {
+                        if (!targetUserId || snapNextCursor == null) return;
+                        setIsLoadingSnaps(true);
+                        setSnapLoadError(null);
+                        fetchSnapsByUserId(targetUserId, snapNextCursor, true)
+                          .catch((err) => {
+                            setSnapLoadError(err?.message || '다음 스냅을 불러오지 못했어요.');
+                          })
+                          .finally(() => setIsLoadingSnaps(false));
+                      }}
+                    >
+                      {isLoadingSnaps ? '불러오는 중…' : '더 보기'}
+                    </VomButton>
+                  </div>
+                )}
+              </>
             )}
           </section>
         </div>

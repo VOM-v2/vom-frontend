@@ -27,8 +27,8 @@ export function setAccessToken(token) {
 }
 
 /**
- * JWT payload에서 사용자 ID 추출 (sub 또는 userId 클레임)
- * localStorage에 userId를 저장하지 않고 토큰에서만 읽음.
+ * JWT payload에서 사용자 ID(UUID) 추출.
+ * 백엔드: sub=이메일, userId=UUID 이므로 userId 클레임을 우선 사용.
  */
 export function getUserIdFromToken() {
   const token = getAccessToken();
@@ -40,7 +40,7 @@ export function getUserIdFromToken() {
     const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
     const padded = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, '=');
     const decoded = JSON.parse(atob(padded));
-    return decoded.sub ?? decoded.userId ?? decoded.id ?? null;
+    return decoded.userId ?? decoded.sub ?? decoded.id ?? null;
   } catch (_) {
     return null;
   }
