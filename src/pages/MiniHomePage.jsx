@@ -4,7 +4,7 @@ import VomButton from '../components/VomButton';
 import VomInput from '../components/VomInput';
 import { buildBackendUrl } from '../config/backend';
 import { getXsrfToken } from '../utils/cookies';
-import { getUserIdFromToken, getAccessToken, getNickname, clearAuth, setAuthFromResponse } from '../utils/authStorage';
+import { getUserIdFromToken, getAccessToken, clearAuth, setAuthFromResponse } from '../utils/authStorage';
 import './MiniHomePage.css';
 
 const MAX_SNAP_CONTENT = 20;
@@ -146,16 +146,16 @@ const MiniHomePage = () => {
   const { flatKeywords, getLabelById } = useInterestHelpers();
   const params = useParams();
   const navigate = useNavigate();
-  const pageNickname = params.nickname ? decodeURIComponent(params.nickname) : null;
-  const currentUserNickname = getNickname();
-  const isMyAccount = !pageNickname || pageNickname === currentUserNickname;
+  const pageUserId = params.userId ? decodeURIComponent(params.userId) : null;
+  const currentUserId = getUserIdFromToken();
+  const isMyAccount = !pageUserId || pageUserId === currentUserId;
 
-  // /mini-home 으로 들어온 경우 본인 닉네임으로 URL 교체
+  // /mini-home 으로 들어온 경우 본인 userId로 URL 교체
   useEffect(() => {
-    if (pageNickname == null && currentUserNickname) {
-      navigate(`/mini-home/${encodeURIComponent(currentUserNickname)}`, { replace: true });
+    if (pageUserId == null && currentUserId) {
+      navigate(`/mini-home/${encodeURIComponent(currentUserId)}`, { replace: true });
     }
-  }, [pageNickname, currentUserNickname, navigate]);
+  }, [pageUserId, currentUserId, navigate]);
 
   const [profile, setProfile] = useState(MOCK_PROFILE);
   const [isEditOpen, setIsEditOpen] = useState(false);

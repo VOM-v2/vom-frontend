@@ -5,7 +5,7 @@ import VomButton from '../components/VomButton';
 import SocialButton from '../components/SocialButton';
 import { buildBackendUrl } from '../config/backend';
 import { getXsrfToken } from '../utils/cookies';
-import { setAuthFromResponse, getNickname } from '../utils/authStorage';
+import { setAuthFromResponse } from '../utils/authStorage';
 import './SignInPage.css';
 
 const GOOGLE_ICON_DATA_URI =
@@ -132,15 +132,16 @@ const SignInPage = () => {
             data.accessToken = accessTokenFromHeader;
           }
           setAuthFromResponse(data);
+          const userId = data?.userDto?.id ?? data?.user?.id;
+          navigate(userId != null ? `/mini-home/${encodeURIComponent(userId)}` : '/mini-home', { replace: true });
+          return;
         } catch (_) {
           if (accessTokenFromHeader) {
             setAuthFromResponse({ accessToken: accessTokenFromHeader });
           }
+          navigate('/mini-home', { replace: true });
+          return;
         }
-
-        const nickname = getNickname();
-        navigate(nickname ? `/mini-home/${encodeURIComponent(nickname)}` : '/mini-home', { replace: true });
-        return;
       }
 
       let errorMessage = '로그인에 실패했어요. 아이디와 비밀번호를 다시 확인해주세요.';

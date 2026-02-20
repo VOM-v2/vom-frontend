@@ -1,12 +1,10 @@
 /**
  * 인증 정보 저장소
- * - accessToken: localStorage (영구, 새로고침 유지)
- * - nickname: sessionStorage (탭 세션만, 미니홈피 URL /mini-home/{nickname}용)
- * - userId는 JWT payload에서 디코딩해 사용 (표준·보안 권장)
+ * - accessToken: localStorage. userId는 JWT payload에서 디코딩해 사용 (표준·보안 권장)
+ * - 미니홈피 경로: /mini-home/{userId}
  */
 
 const KEY_ACCESS_TOKEN = 'vom_access_token';
-const KEY_NICKNAME = 'vom_nickname';
 
 export function getAccessToken() {
   try {
@@ -49,51 +47,21 @@ export function getUserIdFromToken() {
 }
 
 /**
- * 로그인/리프레시 응답에서 accessToken + nickname 저장
- * nickname은 sessionStorage에만 저장 (미니홈피 경로용)
+ * 로그인/리프레시 응답에서 accessToken만 저장
  */
 export function setAuthFromResponse(data) {
   const token = data?.accessToken ?? data?.access_token;
   if (token != null) {
     setAccessToken(token);
   }
-  const user = data?.userDto ?? data?.user;
-  if (user?.nickname != null) {
-    try {
-      sessionStorage.setItem(KEY_NICKNAME, String(user.nickname));
-    } catch (_) {
-      // ignore
-    }
-  }
-}
-
-export function getNickname() {
-  try {
-    return sessionStorage.getItem(KEY_NICKNAME);
-  } catch (_) {
-    return null;
-  }
-}
-
-export function setNickname(nickname) {
-  try {
-    if (nickname != null) {
-      sessionStorage.setItem(KEY_NICKNAME, String(nickname));
-    } else {
-      sessionStorage.removeItem(KEY_NICKNAME);
-    }
-  } catch (_) {
-    // ignore
-  }
 }
 
 /**
- * 로그아웃 시 accessToken(localStorage), nickname(sessionStorage) 제거
+ * 로그아웃 시 accessToken 제거
  */
 export function clearAuth() {
   try {
     localStorage.removeItem(KEY_ACCESS_TOKEN);
-    sessionStorage.removeItem(KEY_NICKNAME);
   } catch (_) {
     // ignore
   }
