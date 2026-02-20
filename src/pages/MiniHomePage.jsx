@@ -166,6 +166,9 @@ const MiniHomePage = () => {
   const [snapSubmitError, setSnapSubmitError] = useState(null);
   const [isSnapSubmitting, setIsSnapSubmitting] = useState(false);
   const [newlyAddedIds, setNewlyAddedIds] = useState(new Set());
+  const [snapDeleteError, setSnapDeleteError] = useState(null);
+  const [deletingSnapId, setDeletingSnapId] = useState(null);
+  const [deleteConfirmSnapId, setDeleteConfirmSnapId] = useState(null);
 
   const targetUserId = pageUserId || currentUserId;
 
@@ -381,6 +384,70 @@ const MiniHomePage = () => {
     },
     [newSnapContent, newSnapImage]
   );
+
+  const handleDeleteSnapClick = useCallback((snapId) => {
+    setDeleteConfirmSnapId(snapId);
+  }, []);
+
+  const handleDeleteSnapConfirm = useCallback(async () => {
+    const snapId = deleteConfirmSnapId;
+    if (!snapId) return;
+    setDeleteConfirmSnapId(null);
+    setSnapDeleteError(null);
+    setDeletingSnapId(snapId);
+    const url = buildBackendUrl(`/api/snaps/${snapId}`);
+    const doDelete = async (token) => {
+      const headers = { Accept: 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      try {
+        const xsrfToken = await getXsrfToken();
+        if (xsrfToken) headers['X-XSRF-TOKEN'] = xsrfToken;
+      } catch (_) {
+        // optional
+      }
+      return fetch(url, {
+        method: 'DELETE',
+        headers,
+        credentials: 'include',
+        mode: 'cors',
+      });
+    };
+    try {
+      let response = await doDelete(getAccessToken());
+      if (response.status === 401) {
+        const refreshRes = await fetch(buildBackendUrl('/api/auth/refresh'), {
+          method: 'POST',
+          credentials: 'include',
+          mode: 'cors',
+        });
+        if (refreshRes.ok) {
+          const refreshData = await refreshRes.json().catch(() => ({}));
+          setAuthFromResponse(refreshData);
+          response = await doDelete(refreshData?.accessToken ?? getAccessToken());
+        }
+      }
+      if (response.status === 204 || response.status === 200) {
+        setSnaps((prev) => prev.filter((s) => String(s.id) !== String(snapId)));
+        return;
+      }
+      const contentType = response.headers.get('content-type');
+      let message = '스냅 삭제에 실패했어요.';
+      if (response.status === 403) message = '본인 스냅만 삭제할 수 있어요.';
+      else if (contentType && contentType.includes('application/json')) {
+        const data = await response.json().catch(() => ({}));
+        message = data?.message ?? data?.error ?? message;
+      }
+      setSnapDeleteError(message);
+    } catch (err) {
+      setSnapDeleteError(err?.message || '스냅 삭제 중 오류가 났어요.');
+    } finally {
+      setDeletingSnapId(null);
+    }
+  }, [deleteConfirmSnapId]);
+
+  const handleDeleteSnapCancel = useCallback(() => {
+    setDeleteConfirmSnapId(null);
+  }, []);
 
   const handleSaveProfile = () => {
     // TODO: 실제 백엔드 연동 시, 아래와 같이 관심 키워드를 아이디 배열로 전송
@@ -608,6 +675,11 @@ const MiniHomePage = () => {
                 {snapLoadError}
               </p>
             )}
+            {snapDeleteError && (
+              <p className="vomMiniHome__snapError" role="alert">
+                {snapDeleteError}
+              </p>
+            )}
             {isLoadingSnaps && snaps.length === 0 ? (
               <p className="vomMiniHome__snapEmpty">스냅을 불러오는 중…</p>
             ) : snaps.length === 0 ? (
@@ -624,6 +696,18 @@ const MiniHomePage = () => {
                     }`}
                     key={snap.id}
                   >
+                    {isMyAccount && (
+                      <button
+                        type="button"
+                        className="vomMiniHome__snapCardDelete"
+                        onClick={() => handleDeleteSnapClick(snap.id)}
+                        disabled={deletingSnapId === snap.id || deleteConfirmSnapId !== null}
+                        title="스냅 삭제"
+                        aria-label="스냅 삭제"
+                      >
+                        {deletingSnapId === snap.id ? '삭제 중…' : '삭제'}
+                      </button>
+                    )}
                     <div className="vomMiniHome__snapPolaroid">
                       <div className="vomMiniHome__snapPhotoWrap">
                         <img
@@ -793,6 +877,36 @@ const MiniHomePage = () => {
             </footer>
           </div>
         </aside>
+
+        {deleteConfirmSnapId && (
+          <div className="vomMiniHome__deleteModal" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+            <div className="vomMiniHome__deleteModalBackdrop" onClick={handleDeleteSnapCancel} />
+            <div className="vomMiniHome__deleteModalContent">
+              <h2 id="delete-modal-title" className="vomMiniHome__deleteModalTitle">
+                스냅 삭제
+              </h2>
+              <p className="vomMiniHome__deleteModalMessage">
+                이 스냅을 삭제할까요? 삭제하면 복구할 수 없어요.
+              </p>
+              <div className="vomMiniHome__deleteModalActions">
+                <VomButton
+                  variant="secondary"
+                  onClick={handleDeleteSnapCancel}
+                  disabled={deletingSnapId !== null}
+                >
+                  취소
+                </VomButton>
+                <VomButton
+                  variant="primary"
+                  onClick={handleDeleteSnapConfirm}
+                  disabled={deletingSnapId !== null}
+                >
+                  {deletingSnapId ? '삭제 중…' : '삭제하기'}
+                </VomButton>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
