@@ -13,6 +13,7 @@ function App() {
         <Route path="/sign-in" element={<SignInPage />} />
         <Route path="/sign-up" element={<SignUpPage />} />
         <Route path="/mini-home" element={<MiniHomePage />} />
+        <Route path="/mini-home/:userId" element={<MiniHomePage />} />
       </Routes>
     </BrowserRouter>
   );
