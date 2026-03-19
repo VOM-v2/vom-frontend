@@ -1,19 +1,17 @@
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import VomButton from '../components/VomButton';
 import VomInput from '../components/VomInput';
 import { buildBackendUrl } from '../config/backend';
 import { getXsrfToken } from '../utils/cookies';
 import { getUserIdFromToken, getAccessToken, clearAuth, setAuthFromResponse } from '../utils/authStorage';
+import { Client } from '@stomp/stompjs';
+import SockJS from 'sockjs-client';
 import './MiniHomePage.css';
 
 const MAX_SNAP_CONTENT = 20;
 
 /** 현재 로그인 사용자 ID (JWT payload에서 디코딩). 없으면 개발용 폴백 */
-function getCurrentUserId() {
-  return getUserIdFromToken() || '00000000-0000-0000-0000-000000000001';
-}
-
 const INTEREST_CATEGORIES = [
   {
     key: 'DIGITAL',
@@ -140,7 +138,7 @@ function useInterestHelpers() {
 }
 
 const MiniHomePage = () => {
-  const { flatKeywords, getLabelById } = useInterestHelpers();
+  const { flatKeywords } = useInterestHelpers();
   const params = useParams();
   const navigate = useNavigate();
   const pageUserId = params.userId ? decodeURIComponent(params.userId) : null;
@@ -188,10 +186,20 @@ const MiniHomePage = () => {
   const [isDmRoomsLoading, setIsDmRoomsLoading] = useState(false);
   const [dmRoomsError, setDmRoomsError] = useState(null);
   const [selectedRoomId, setSelectedRoomId] = useState(null);
-  const [selectedRoomDetail, setSelectedRoomDetail] = useState(null);
   const [dmMessages, setDmMessages] = useState([]);
   const [isDmMessagesLoading, setIsDmMessagesLoading] = useState(false);
   const [dmMessagesError, setDmMessagesError] = useState(null);
+  const [dmDraft, setDmDraft] = useState('');
+
+  const selectedRoom = useMemo(() => {
+    if (!selectedRoomId) return null;
+    return dmRooms.find((r) => String(r.roomId) === String(selectedRoomId)) ?? null;
+  }, [dmRooms, selectedRoomId]);
+
+  const stompClientRef = useRef(null);
+  const roomSubscriptionRef = useRef(null);
+  const notificationSubscriptionRef = useRef(null);
+  const pendingRoomToSubscribeRef = useRef(null);
 
   const targetUserId = pageUserId || currentUserId;
 
@@ -585,6 +593,130 @@ const MiniHomePage = () => {
     return headers;
   };
 
+  const cleanupRoomSubscription = useCallback(() => {
+    try {
+      if (roomSubscriptionRef.current) {
+        roomSubscriptionRef.current.unsubscribe();
+      }
+    } catch (_) {
+      // ignore
+    } finally {
+      roomSubscriptionRef.current = null;
+    }
+  }, []);
+
+  const cleanupAllSubscriptions = useCallback(() => {
+    cleanupRoomSubscription();
+    try {
+      if (notificationSubscriptionRef.current) {
+        notificationSubscriptionRef.current.unsubscribe();
+      }
+    } catch (_) {
+      // ignore
+    } finally {
+      notificationSubscriptionRef.current = null;
+    }
+  }, [cleanupRoomSubscription]);
+
+  const subscribeToRoom = useCallback(
+    (roomId) => {
+      if (!roomId) return;
+      const client = stompClientRef.current;
+      if (!client || !client.connected) {
+        pendingRoomToSubscribeRef.current = roomId;
+        return;
+      }
+
+      cleanupRoomSubscription();
+      pendingRoomToSubscribeRef.current = null;
+
+      roomSubscriptionRef.current = client.subscribe(`/topic/dm/${roomId}`, (message) => {
+        try {
+          const body = JSON.parse(message.body);
+          setDmMessages((prev) => [
+            ...prev,
+            {
+              id: body.id ?? body.messageId ?? `${Date.now()}`,
+              senderId: body.senderId,
+              content: body.content ?? '',
+              createdAt: body.createdAt ?? new Date().toISOString(),
+            },
+          ]);
+        } catch (_) {
+          // ignore malformed
+        }
+      });
+    },
+    [cleanupRoomSubscription]
+  );
+
+  const ensureStompConnected = useCallback(() => {
+    const accessToken = getAccessToken();
+    if (!accessToken) return;
+    if (stompClientRef.current?.active) return;
+
+    const wsUrl = buildBackendUrl('/ws');
+    const client = new Client({
+      webSocketFactory: () => new SockJS(wsUrl),
+      connectHeaders: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      reconnectDelay: 4000,
+    });
+
+    client.onConnect = () => {
+      // 연결 완료 후 구독
+      if (!notificationSubscriptionRef.current) {
+        notificationSubscriptionRef.current = client.subscribe('/user/queue/notifications', (message) => {
+          try {
+            const body = JSON.parse(message.body);
+            // 필요 시 여기에서 unreadCount 업데이트 가능
+            // console.log('새 DM 알림:', body);
+            const roomId = body?.roomId;
+            if (roomId && String(roomId) !== String(selectedRoomId)) {
+              setDmRooms((prev) =>
+                prev.map((room) =>
+                  String(room.roomId) === String(roomId)
+                    ? { ...room, unreadCount: (room.unreadCount ?? 0) + 1 }
+                    : room
+                )
+              );
+            }
+          } catch (_) {
+            // ignore
+          }
+        });
+      }
+
+      const toSubscribe = pendingRoomToSubscribeRef.current || selectedRoomId;
+      if (toSubscribe) subscribeToRoom(toSubscribe);
+    };
+
+    client.onStompError = () => {
+      // ignore
+    };
+    client.onWebSocketError = () => {
+      // ignore
+    };
+
+    stompClientRef.current = client;
+    client.activate();
+  }, [selectedRoomId, subscribeToRoom]);
+
+  const disconnectStomp = useCallback(() => {
+    const client = stompClientRef.current;
+    cleanupAllSubscriptions();
+    pendingRoomToSubscribeRef.current = null;
+    if (client) {
+      try {
+        client.deactivate();
+      } catch (_) {
+        // ignore
+      }
+    }
+    stompClientRef.current = null;
+  }, [cleanupAllSubscriptions]);
+
   // DM 방 목록 조회
   const fetchDmRooms = useCallback(async () => {
     setIsDmRoomsLoading(true);
@@ -627,6 +759,10 @@ const MiniHomePage = () => {
       setIsDmMessagesLoading(true);
       setDmMessagesError(null);
       try {
+        // STOMP 연결/구독 준비 (onConnect 이후 subscribe)
+        pendingRoomToSubscribeRef.current = roomId;
+        ensureStompConnected();
+
         // 읽음 처리 PATCH (XSRF 포함)
         try {
           const patchUrl = buildBackendUrl(`/api/direct-messages/${roomId}`);
@@ -682,7 +818,7 @@ const MiniHomePage = () => {
         setIsDmMessagesLoading(false);
       }
     },
-    []
+    [ensureStompConnected]
   );
 
   // DM 창 열릴 때 방 목록 로딩
@@ -692,6 +828,51 @@ const MiniHomePage = () => {
       fetchDmRooms();
     }
   }, [isDmOpen, dmRooms.length, isDmRoomsLoading, fetchDmRooms]);
+
+  // DM 창 닫을 때 websocket 정리
+  useEffect(() => {
+    if (isDmOpen) return;
+    cleanupAllSubscriptions();
+    disconnectStomp();
+  }, [isDmOpen, cleanupAllSubscriptions, disconnectStomp]);
+
+  // 방 이동 시 기존 방 구독 해제 후 새 방 구독
+  useEffect(() => {
+    if (!isDmOpen) return;
+    if (!selectedRoomId) {
+      cleanupRoomSubscription();
+      return;
+    }
+    ensureStompConnected();
+    subscribeToRoom(selectedRoomId);
+    return () => {
+      cleanupRoomSubscription();
+    };
+  }, [isDmOpen, selectedRoomId, ensureStompConnected, subscribeToRoom, cleanupRoomSubscription]);
+
+  const handleSendDm = useCallback(
+    (e) => {
+      e?.preventDefault?.();
+      const roomId = selectedRoomId;
+      const content = dmDraft.trim();
+      if (!roomId || !content) return;
+      const client = stompClientRef.current;
+      if (!client || !client.connected) {
+        setDmMessagesError('채팅 서버에 연결되지 않았어요. 잠시 후 다시 시도해주세요.');
+        return;
+      }
+      try {
+        client.publish({
+          destination: `/app/dm/${roomId}/send`,
+          body: JSON.stringify({ content }),
+        });
+        setDmDraft('');
+      } catch (err) {
+        setDmMessagesError(err?.message || '메시지 전송에 실패했어요.');
+      }
+    },
+    [selectedRoomId, dmDraft]
+  );
 
   return (
     <div className="vom-page">
@@ -1211,10 +1392,10 @@ const MiniHomePage = () => {
               </div>
               <div className="vomMiniHome__dmMessages">
                 <div className="vomMiniHome__dmMessagesHeader">
-                  {selectedRoomDetail ? (
+                  {selectedRoom ? (
                     <>
                       <span className="vomMiniHome__dmPartnerName">
-                        {selectedRoomDetail.receiverNickname || '상대방'}
+                        {selectedRoom.partnerNickname || '상대방'}
                       </span>
                     </>
                   ) : (
@@ -1229,7 +1410,7 @@ const MiniHomePage = () => {
                 {isDmMessagesLoading && (
                   <p className="vomMiniHome__dmInfo">메시지를 불러오는 중…</p>
                 )}
-                {!isDmMessagesLoading && selectedRoomDetail && dmMessages.length === 0 && !dmMessagesError && (
+                {!isDmMessagesLoading && selectedRoom && dmMessages.length === 0 && !dmMessagesError && (
                   <p className="vomMiniHome__dmInfo">아직 주고받은 메시지가 없어요.</p>
                 )}
                 <div className="vomMiniHome__dmMessagesList">
@@ -1248,6 +1429,24 @@ const MiniHomePage = () => {
                     );
                   })}
                 </div>
+
+                <form className="vomMiniHome__dmComposer" onSubmit={handleSendDm}>
+                  <input
+                    className="vomMiniHome__dmComposerInput"
+                    type="text"
+                    value={dmDraft}
+                    onChange={(e) => setDmDraft(e.target.value)}
+                    placeholder={selectedRoomId ? '메시지 입력…' : '방을 선택하세요'}
+                    disabled={!selectedRoomId}
+                  />
+                  <button
+                    type="submit"
+                    className="vomMiniHome__dmComposerSend"
+                    disabled={!selectedRoomId || dmDraft.trim().length === 0}
+                  >
+                    전송
+                  </button>
+                </form>
               </div>
             </div>
           </div>

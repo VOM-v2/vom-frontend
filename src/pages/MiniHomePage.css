@@ -1034,6 +1034,49 @@
   padding-right: 2px;
 }
 
+.vomMiniHome__dmComposer {
+  display: flex;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--vom-gray-200);
+}
+
+.vomMiniHome__dmComposerInput {
+  flex: 1;
+  border-radius: 10px;
+  border: 2px solid var(--vom-gray-200);
+  padding: 7px 10px;
+  font-size: 12px;
+  font-family: var(--vom-font);
+  background: var(--vom-gray-50);
+  color: var(--vom-gray-800);
+}
+
+.vomMiniHome__dmComposerInput:disabled {
+  opacity: 0.7;
+}
+
+.vomMiniHome__dmComposerSend {
+  flex: 0 0 auto;
+  border-radius: 10px;
+  border: 2px solid var(--vom-gray-200);
+  background: var(--vom-gray-0);
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.vomMiniHome__dmComposerSend:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.vomMiniHome__dmComposerSend:not(:disabled) {
+  border-color: var(--vom-pink-300);
+  background: var(--vom-pink-50);
+}
+
 .vomMiniHome__dmMessage {
   display: flex;
 }
