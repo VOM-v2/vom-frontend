@@ -139,6 +139,12 @@
   font-size: 12px;
 }
 
+.vomMiniHome__dmBtn {
+  height: 34px;
+  padding-inline: 12px;
+  font-size: 12px;
+}
+
 .vomMiniHome__interests {
   border-radius: var(--vom-radius-md);
   border: 2px dashed rgba(148, 163, 184, 0.9);
@@ -891,3 +897,186 @@
   justify-content: flex-end;
 }
 
+/* ----- DM 패널 ----- */
+.vomMiniHome__dmPanel {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: 380px;
+  max-width: calc(100% - 32px);
+  max-height: 420px;
+  border-radius: var(--vom-radius-lg);
+  border: 2px solid var(--vom-gray-300);
+  background: var(--vom-gray-0);
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 900;
+}
+
+.vomMiniHome__dmHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--vom-gray-200);
+  background: var(--vom-gray-50);
+}
+
+.vomMiniHome__dmTitle {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--vom-gray-800);
+}
+
+.vomMiniHome__dmClose {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.vomMiniHome__dmBody {
+  display: grid;
+  grid-template-columns: 1.1fr 2fr;
+  min-height: 220px;
+  max-height: 360px;
+}
+
+.vomMiniHome__dmRooms {
+  border-right: 1px solid var(--vom-gray-200);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vomMiniHome__dmRoomsHeader {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--vom-gray-700);
+}
+
+.vomMiniHome__dmRoomsList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.vomMiniHome__dmRoomBtn {
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--vom-gray-700);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.vomMiniHome__dmRoomBtn.isActive {
+  background: var(--vom-pink-50);
+  border-color: var(--vom-pink-200);
+  color: var(--vom-pink-700);
+}
+
+.vomMiniHome__dmRoomName {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  flex: 1;
+}
+
+.vomMiniHome__dmUnreadBadge {
+  flex: 0 0 auto;
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--vom-pink-500);
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.vomMiniHome__dmMessages {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vomMiniHome__dmMessagesHeader {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--vom-gray-700);
+  min-height: 18px;
+}
+
+.vomMiniHome__dmMessagesList {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 2px;
+}
+
+.vomMiniHome__dmMessage {
+  display: flex;
+}
+
+.vomMiniHome__dmMessage.isMine {
+  justify-content: flex-end;
+}
+
+.vomMiniHome__dmMessage.isPartner {
+  justify-content: flex-start;
+}
+
+.vomMiniHome__dmBubble {
+  max-width: 80%;
+  padding: 6px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  background: var(--vom-gray-100);
+}
+
+.vomMiniHome__dmMessage.isMine .vomMiniHome__dmBubble {
+  background: var(--vom-pink-500);
+  color: white;
+}
+
+.vomMiniHome__dmInfo {
+  margin: 0;
+  font-size: 11px;
+  color: var(--vom-gray-500);
+}
+
+.vomMiniHome__dmError {
+  margin: 0;
+  font-size: 11px;
+  color: var(--vom-error, #b91c1c);
+}
+
+@media (max-width: 600px) {
+  .vomMiniHome__dmPanel {
+    right: 8px;
+    left: 8px;
+    width: auto;
+    bottom: 8px;
+  }
+}

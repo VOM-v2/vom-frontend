@@ -182,6 +182,17 @@ const MiniHomePage = () => {
   const [isProfileSaving, setIsProfileSaving] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState(null);
 
+  // DM 상태
+  const [isDmOpen, setIsDmOpen] = useState(false);
+  const [dmRooms, setDmRooms] = useState([]);
+  const [isDmRoomsLoading, setIsDmRoomsLoading] = useState(false);
+  const [dmRoomsError, setDmRoomsError] = useState(null);
+  const [selectedRoomId, setSelectedRoomId] = useState(null);
+  const [selectedRoomDetail, setSelectedRoomDetail] = useState(null);
+  const [dmMessages, setDmMessages] = useState([]);
+  const [isDmMessagesLoading, setIsDmMessagesLoading] = useState(false);
+  const [dmMessagesError, setDmMessagesError] = useState(null);
+
   const targetUserId = pageUserId || currentUserId;
 
   const fetchSnapsByUserId = useCallback(
@@ -567,6 +578,121 @@ const MiniHomePage = () => {
     }
   }, [profile.name, profile.gender, profile.birthDate, profile.intro, interestIdsForBackend, profileImageFile]);
 
+  const authHeaders = () => {
+    const token = getAccessToken();
+    const headers = { Accept: 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return headers;
+  };
+
+  // DM 방 목록 조회
+  const fetchDmRooms = useCallback(async () => {
+    setIsDmRoomsLoading(true);
+    setDmRoomsError(null);
+    try {
+      const url = buildBackendUrl('/api/direct-messages');
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: authHeaders(),
+        credentials: 'include',
+        mode: 'cors',
+      });
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(text || 'DM 방 목록을 불러오지 못했어요.');
+      }
+      const data = await response.json();
+      const list = Array.isArray(data) ? data : data?.rooms || [];
+      setDmRooms(
+        list.map((room) => ({
+          roomId: room.roomId ?? room.id,
+          partnerId: room.partnerId,
+          partnerNickname: room.partnerNickname ?? room.nickname ?? '알 수 없음',
+          unreadCount: typeof room.unreadCount === 'number' ? room.unreadCount : 0,
+        }))
+      );
+    } catch (err) {
+      setDmRoomsError(err?.message || 'DM 방 목록을 불러오지 못했어요.');
+      setDmRooms([]);
+    } finally {
+      setIsDmRoomsLoading(false);
+    }
+  }, []);
+
+  // 특정 DM 방 메시지 조회 (List<DirectMessageResponse> 응답)
+  const fetchDmRoomMessages = useCallback(
+    async (roomId) => {
+      if (!roomId) return;
+      setSelectedRoomId(roomId);
+      setIsDmMessagesLoading(true);
+      setDmMessagesError(null);
+      try {
+        // 읽음 처리 PATCH (XSRF 포함)
+        try {
+          const patchUrl = buildBackendUrl(`/api/direct-messages/${roomId}`);
+          const patchHeaders = authHeaders();
+          try {
+            const xsrf = await getXsrfToken();
+            if (xsrf) patchHeaders['X-XSRF-TOKEN'] = xsrf;
+          } catch (_) {
+            // XSRF 토큰은 선택적
+          }
+          await fetch(patchUrl, {
+            method: 'PATCH',
+            headers: patchHeaders,
+            credentials: 'include',
+            mode: 'cors',
+          });
+        } catch (_) {
+          // 읽음 패치는 실패해도 메시지 조회는 계속 시도
+        }
+
+        const url = buildBackendUrl(`/api/direct-messages/${roomId}`);
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: authHeaders(),
+          credentials: 'include',
+          mode: 'cors',
+        });
+        if (!response.ok) {
+          const text = await response.text().catch(() => '');
+          throw new Error(text || 'DM 메시지를 불러오지 못했어요.');
+        }
+        const data = await response.json();
+        const normalized = Array.isArray(data)
+          ? data.map((m) => ({
+              id: m.id ?? m.messageId,
+              senderId: m.senderId,
+              content: m.content ?? '',
+              createdAt: m.createdAt,
+            }))
+          : [];
+        setDmMessages(normalized);
+
+        // 현재 방의 안 읽은 수 0으로 로컬에서도 반영
+        setDmRooms((prev) =>
+          prev.map((room) =>
+            String(room.roomId) === String(roomId) ? { ...room, unreadCount: 0 } : room
+          )
+        );
+      } catch (err) {
+        setDmMessagesError(err?.message || 'DM 메시지를 불러오지 못했어요.');
+        setDmMessages([]);
+      } finally {
+        setIsDmMessagesLoading(false);
+      }
+    },
+    []
+  );
+
+  // DM 창 열릴 때 방 목록 로딩
+  useEffect(() => {
+    if (!isDmOpen) return;
+    if (dmRooms.length === 0 && !isDmRoomsLoading) {
+      fetchDmRooms();
+    }
+  }, [isDmOpen, dmRooms.length, isDmRoomsLoading, fetchDmRooms]);
+
   return (
     <div className="vom-page">
       <div className="vomMiniHome">
@@ -620,6 +746,15 @@ const MiniHomePage = () => {
                       onClick={() => setIsEditOpen(true)}
                     >
                       프로필 수정
+                    </VomButton>
+                    <VomButton
+                      variant="secondary"
+                      className="vomMiniHome__dmBtn"
+                      onClick={() => {
+                        setIsDmOpen((prev) => !prev);
+                      }}
+                    >
+                      DM 창 {isDmOpen ? '닫기' : '열기'}
                     </VomButton>
                     <VomButton
                       variant="secondary"
@@ -1022,6 +1157,99 @@ const MiniHomePage = () => {
               </VomButton>
             </footer>
           </div>
+          </div>
+        )}
+
+        {isDmOpen && (
+          <div className="vomMiniHome__dmPanel" role="dialog" aria-modal="false" aria-label="DM 창">
+            <div className="vomMiniHome__dmHeader">
+              <span className="vomMiniHome__dmTitle">DM</span>
+              <button
+                type="button"
+                className="vomMiniHome__dmClose"
+                onClick={() => {
+                  setIsDmOpen(false);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="vomMiniHome__dmBody">
+              <div className="vomMiniHome__dmRooms">
+                <div className="vomMiniHome__dmRoomsHeader">대화 목록</div>
+                {isDmRoomsLoading && <p className="vomMiniHome__dmInfo">불러오는 중…</p>}
+                {dmRoomsError && (
+                  <p className="vomMiniHome__dmError" role="alert">
+                    {dmRoomsError}
+                  </p>
+                )}
+                {!isDmRoomsLoading && dmRooms.length === 0 && !dmRoomsError && (
+                  <p className="vomMiniHome__dmInfo">아직 시작된 DM이 없어요.</p>
+                )}
+                <ul className="vomMiniHome__dmRoomsList">
+                  {dmRooms.map((room) => (
+                    <li key={room.roomId}>
+                      <button
+                        type="button"
+                        className={`vomMiniHome__dmRoomBtn ${
+                          String(selectedRoomId) === String(room.roomId) ? 'isActive' : ''
+                        }`}
+                        onClick={() => fetchDmRoomMessages(room.roomId)}
+                      >
+                        <span className="vomMiniHome__dmRoomName">
+                          {room.partnerNickname || '알 수 없음'}
+                        </span>
+                        {room.unreadCount > 0 && (
+                          <span className="vomMiniHome__dmUnreadBadge">
+                            {room.unreadCount > 99 ? '99+' : room.unreadCount}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="vomMiniHome__dmMessages">
+                <div className="vomMiniHome__dmMessagesHeader">
+                  {selectedRoomDetail ? (
+                    <>
+                      <span className="vomMiniHome__dmPartnerName">
+                        {selectedRoomDetail.receiverNickname || '상대방'}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="vomMiniHome__dmInfo">왼쪽에서 DM 방을 선택하세요.</span>
+                  )}
+                </div>
+                {dmMessagesError && (
+                  <p className="vomMiniHome__dmError" role="alert">
+                    {dmMessagesError}
+                  </p>
+                )}
+                {isDmMessagesLoading && (
+                  <p className="vomMiniHome__dmInfo">메시지를 불러오는 중…</p>
+                )}
+                {!isDmMessagesLoading && selectedRoomDetail && dmMessages.length === 0 && !dmMessagesError && (
+                  <p className="vomMiniHome__dmInfo">아직 주고받은 메시지가 없어요.</p>
+                )}
+                <div className="vomMiniHome__dmMessagesList">
+                  {dmMessages.map((msg) => {
+                    const isMine =
+                      currentUserId &&
+                      msg.senderId &&
+                      String(msg.senderId).toLowerCase() === String(currentUserId).toLowerCase();
+                    return (
+                      <div
+                        key={msg.id}
+                        className={`vomMiniHome__dmMessage ${isMine ? 'isMine' : 'isPartner'}`}
+                      >
+                        <div className="vomMiniHome__dmBubble">{msg.content}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
