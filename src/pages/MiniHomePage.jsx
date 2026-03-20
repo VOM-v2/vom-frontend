@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import VomButton from '../components/VomButton';
 import VomInput from '../components/VomInput';
@@ -112,6 +112,9 @@ const SNAP_IMAGE_PLACEHOLDER =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Crect fill='%23e5e7eb' width='400' height='400'/%3E%3Ctext fill='%239ca3af' font-family='sans-serif' font-size='14' x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle'%3E이미지 없음%3C/text%3E%3C/svg%3E";
 
 const SNAP_PAGE_SIZE = 50;
+// 초기 진입 시에는 너무 많은(예: 20개) 메시지를 한 번에 받아서
+// 스크롤을 맨 아래로 둬도 오래된 메시지가 상단에 보일 수 있어 크기를 줄임
+const DM_MESSAGE_PAGE_SIZE = 12;
 
 function formatDateBack(dateStr) {
   try {
@@ -190,6 +193,9 @@ const MiniHomePage = () => {
   const [isDmMessagesLoading, setIsDmMessagesLoading] = useState(false);
   const [dmMessagesError, setDmMessagesError] = useState(null);
   const [dmDraft, setDmDraft] = useState('');
+  const [dmMessagesPage, setDmMessagesPage] = useState(0);
+  const [dmHasMoreMessages, setDmHasMoreMessages] = useState(true);
+  const [isDmLoadingMoreMessages, setIsDmLoadingMoreMessages] = useState(false);
 
   const selectedRoom = useMemo(() => {
     if (!selectedRoomId) return null;
@@ -200,6 +206,11 @@ const MiniHomePage = () => {
   const roomSubscriptionRef = useRef(null);
   const notificationSubscriptionRef = useRef(null);
   const pendingRoomToSubscribeRef = useRef(null);
+  const dmMessagesListRef = useRef(null);
+  const pendingScrollAdjustRef = useRef(null);
+  const shouldScrollToBottomRef = useRef(true);
+  const dmLoadMoreInFlightRef = useRef(false);
+  const isDmInitialScrollPendingRef = useRef(false);
 
   const targetUserId = pageUserId || currentUserId;
 
@@ -639,7 +650,8 @@ const MiniHomePage = () => {
               id: body.id ?? body.messageId ?? `${Date.now()}`,
               senderId: body.senderId,
               content: body.content ?? '',
-              createdAt: body.createdAt ?? new Date().toISOString(),
+              createdAt:
+                body.createdAt ?? body.created_at ?? body.createdDate ?? body.created_date ?? new Date().toISOString(),
             },
           ]);
         } catch (_) {
@@ -752,39 +764,68 @@ const MiniHomePage = () => {
     }
   }, []);
 
-  // 특정 DM 방 메시지 조회 (List<DirectMessageResponse> 응답)
+  // 특정 DM 방 메시지 조회 (Page<DirectMessageResponse> 응답)
   const fetchDmRoomMessages = useCallback(
-    async (roomId) => {
+    async (roomId, { page = 0, reset = true } = {}) => {
       if (!roomId) return;
-      setSelectedRoomId(roomId);
-      setIsDmMessagesLoading(true);
+      if (reset) {
+        setSelectedRoomId(roomId);
+        setDmMessagesPage(page);
+        setDmHasMoreMessages(true);
+        setIsDmMessagesLoading(true);
+        setIsDmLoadingMoreMessages(false);
+        dmLoadMoreInFlightRef.current = false;
+        isDmInitialScrollPendingRef.current = true;
+        shouldScrollToBottomRef.current = true;
+      } else {
+        setIsDmLoadingMoreMessages(true);
+        shouldScrollToBottomRef.current = false;
+        const listEl = dmMessagesListRef.current;
+        if (listEl) {
+          // prepend 되는 동안 사용자 화면이 점프하지 않도록 스크롤 높이 차이를 보정
+          pendingScrollAdjustRef.current = {
+            prevScrollHeight: listEl.scrollHeight,
+            prevScrollTop: listEl.scrollTop,
+          };
+        }
+      }
+
       setDmMessagesError(null);
       try {
-        // STOMP 연결/구독 준비 (onConnect 이후 subscribe)
-        pendingRoomToSubscribeRef.current = roomId;
-        ensureStompConnected();
-
-        // 읽음 처리 PATCH (XSRF 포함)
-        try {
-          const patchUrl = buildBackendUrl(`/api/direct-messages/${roomId}`);
-          const patchHeaders = authHeaders();
-          try {
-            const xsrf = await getXsrfToken();
-            if (xsrf) patchHeaders['X-XSRF-TOKEN'] = xsrf;
-          } catch (_) {
-            // XSRF 토큰은 선택적
-          }
-          await fetch(patchUrl, {
-            method: 'PATCH',
-            headers: patchHeaders,
-            credentials: 'include',
-            mode: 'cors',
-          });
-        } catch (_) {
-          // 읽음 패치는 실패해도 메시지 조회는 계속 시도
+        if (reset) {
+          // STOMP 연결/구독 준비 (onConnect 이후 subscribe)
+          pendingRoomToSubscribeRef.current = roomId;
+          ensureStompConnected();
         }
 
-        const url = buildBackendUrl(`/api/direct-messages/${roomId}`);
+        // 읽음 처리 PATCH (XSRF 포함)
+        if (reset) {
+          try {
+            const patchUrl = buildBackendUrl(`/api/direct-messages/${roomId}`);
+            const patchHeaders = authHeaders();
+            try {
+              const xsrf = await getXsrfToken();
+              if (xsrf) patchHeaders['X-XSRF-TOKEN'] = xsrf;
+            } catch (_) {
+              // XSRF 토큰은 선택적
+            }
+            await fetch(patchUrl, {
+              method: 'PATCH',
+              headers: patchHeaders,
+              credentials: 'include',
+              mode: 'cors',
+            });
+          } catch (_) {
+            // 읽음 패치는 실패해도 메시지 조회는 계속 시도
+          }
+        }
+
+        // Spring Pageable: GET /api/direct-messages/{roomId}?page={n}&size=20
+        const params = new URLSearchParams();
+        params.set('page', String(page));
+        params.set('size', String(DM_MESSAGE_PAGE_SIZE));
+
+        const url = `${buildBackendUrl(`/api/direct-messages/${roomId}`)}?${params.toString()}`;
         const response = await fetch(url, {
           method: 'GET',
           headers: authHeaders(),
@@ -796,27 +837,70 @@ const MiniHomePage = () => {
           throw new Error(text || 'DM 메시지를 불러오지 못했어요.');
         }
         const data = await response.json();
-        const normalized = Array.isArray(data)
-          ? data.map((m) => ({
+        const list = Array.isArray(data) ? data : Array.isArray(data?.content) ? data.content : [];
+
+        const normalized = list
+          .map((m) => {
+            // 서버 응답 필드명이 케이스/버전에 따라 달라질 수 있어 방어적으로 처리
+            const createdAt =
+              m.createdAt ?? m.created_at ?? m.createdDate ?? m.created_date ?? m.timestamp ?? null;
+            return {
               id: m.id ?? m.messageId,
               senderId: m.senderId,
               content: m.content ?? '',
-              createdAt: m.createdAt,
-            }))
-          : [];
-        setDmMessages(normalized);
+              createdAt,
+            };
+          })
+          .sort((a, b) => {
+            const aTime = Date.parse(a.createdAt ?? '');
+            const bTime = Date.parse(b.createdAt ?? '');
+            if (Number.isNaN(aTime) || Number.isNaN(bTime)) return 0;
+            return aTime - bTime;
+          });
+
+        // Page 응답이면 hasNext/last를 우선 사용
+        const hasMore =
+          typeof data?.hasNext === 'boolean'
+            ? Boolean(data.hasNext)
+            : typeof data?.last === 'boolean'
+              ? !Boolean(data.last)
+              : normalized.length === DM_MESSAGE_PAGE_SIZE;
+
+        setDmMessagesPage(page);
+        setDmHasMoreMessages(hasMore);
+
+        setDmMessages((prev) => {
+          if (reset) return normalized;
+          const merged = [...prev, ...normalized];
+          const map = new Map();
+          for (const m of merged) map.set(m.id, m);
+          return Array.from(map.values()).sort((a, b) => {
+            const aTime = Date.parse(a.createdAt ?? '');
+            const bTime = Date.parse(b.createdAt ?? '');
+            if (Number.isNaN(aTime) || Number.isNaN(bTime)) return 0;
+            return aTime - bTime;
+          });
+        });
 
         // 현재 방의 안 읽은 수 0으로 로컬에서도 반영
-        setDmRooms((prev) =>
-          prev.map((room) =>
-            String(room.roomId) === String(roomId) ? { ...room, unreadCount: 0 } : room
-          )
-        );
+        if (reset) {
+          setDmRooms((prev) =>
+            prev.map((room) =>
+              String(room.roomId) === String(roomId) ? { ...room, unreadCount: 0 } : room
+            )
+          );
+        }
       } catch (err) {
         setDmMessagesError(err?.message || 'DM 메시지를 불러오지 못했어요.');
-        setDmMessages([]);
+        if (reset) setDmMessages([]);
+        setDmHasMoreMessages(false);
+        pendingScrollAdjustRef.current = null;
       } finally {
-        setIsDmMessagesLoading(false);
+        if (reset) {
+          setIsDmMessagesLoading(false);
+        } else {
+          setIsDmLoadingMoreMessages(false);
+        }
       }
     },
     [ensureStompConnected]
@@ -829,6 +913,98 @@ const MiniHomePage = () => {
       fetchDmRooms();
     }
   }, [isDmOpen, dmRooms.length, isDmRoomsLoading, fetchDmRooms]);
+
+  useEffect(() => {
+    if (!isDmOpen) return;
+    const listEl = dmMessagesListRef.current;
+    if (!listEl) return;
+    // older messages를 prepend 로딩하는 중이면, 스크롤 위치를 유지
+    if (pendingScrollAdjustRef.current) {
+      const { prevScrollHeight, prevScrollTop } = pendingScrollAdjustRef.current;
+      pendingScrollAdjustRef.current = null;
+      const newScrollHeight = listEl.scrollHeight;
+      const delta = newScrollHeight - prevScrollHeight;
+      listEl.scrollTop = prevScrollTop + delta;
+      return;
+    }
+
+    // 사용자가 아래를 보고 있을 때만 자동으로 최신(하단)으로 이동
+    const distanceFromBottom = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight;
+    const isNearBottom = distanceFromBottom < 80;
+    if (shouldScrollToBottomRef.current || isNearBottom) {
+      shouldScrollToBottomRef.current = false;
+      listEl.scrollTop = listEl.scrollHeight;
+    }
+  }, [dmMessages, isDmOpen, selectedRoomId]);
+
+  useLayoutEffect(() => {
+    if (!isDmOpen) return;
+    const listEl = dmMessagesListRef.current;
+    if (!listEl) return;
+    if (!isDmInitialScrollPendingRef.current) return;
+
+    // 입장 직후 DOM 반영 직후에 하단으로 보정 (useEffect보다 더 안정적)
+    listEl.scrollTop = listEl.scrollHeight;
+    shouldScrollToBottomRef.current = false;
+    isDmInitialScrollPendingRef.current = false;
+  }, [dmMessages, isDmOpen, selectedRoomId]);
+
+  const handleDmMessagesScroll = useCallback(() => {
+    const listEl = dmMessagesListRef.current;
+    if (!listEl) return;
+    if (!selectedRoomId) return;
+    if (isDmMessagesLoading || isDmLoadingMoreMessages) return;
+    if (isDmInitialScrollPendingRef.current) return;
+    if (!dmHasMoreMessages) return;
+    if (dmLoadMoreInFlightRef.current) return;
+    // 최상단(또는 그 근처)일 때만 다음 페이지(더 과거 메시지)를 로드
+    if (listEl.scrollTop > 10) return;
+
+    dmLoadMoreInFlightRef.current = true;
+    const nextPage = dmMessagesPage + 1;
+    fetchDmRoomMessages(selectedRoomId, { page: nextPage, reset: false }).finally(() => {
+      dmLoadMoreInFlightRef.current = false;
+    });
+  }, [
+    selectedRoomId,
+    isDmMessagesLoading,
+    isDmLoadingMoreMessages,
+    dmHasMoreMessages,
+    dmMessagesPage,
+    fetchDmRoomMessages,
+  ]);
+
+  // 스크롤바가 거의 없는 경우(예: pageSize가 딱 맞음)엔 onScroll이 잘 안 뜰 수 있어
+  // 휠을 위로 내렸을 때 최상단이면 로딩을 트리거한다.
+  const handleDmMessagesWheel = useCallback(
+    (e) => {
+      if (!selectedRoomId) return;
+      if (isDmMessagesLoading || isDmLoadingMoreMessages) return;
+      if (isDmInitialScrollPendingRef.current) return;
+      if (!dmHasMoreMessages) return;
+      if (dmLoadMoreInFlightRef.current) return;
+
+      const listEl = dmMessagesListRef.current;
+      if (!listEl) return;
+      if (e.deltaY >= 0) return; // 아래로 스크롤이면 무시
+
+      if (listEl.scrollTop > 10) return; // 거의 최상단에서만
+
+      dmLoadMoreInFlightRef.current = true;
+      const nextPage = dmMessagesPage + 1;
+      fetchDmRoomMessages(selectedRoomId, { page: nextPage, reset: false }).finally(() => {
+        dmLoadMoreInFlightRef.current = false;
+      });
+    },
+    [
+      selectedRoomId,
+      isDmMessagesLoading,
+      isDmLoadingMoreMessages,
+      dmHasMoreMessages,
+      dmMessagesPage,
+      fetchDmRoomMessages,
+    ]
+  );
 
   // DM 창 닫을 때 websocket 정리
   useEffect(() => {
@@ -1414,7 +1590,12 @@ const MiniHomePage = () => {
                 {!isDmMessagesLoading && selectedRoom && dmMessages.length === 0 && !dmMessagesError && (
                   <p className="vomMiniHome__dmInfo">아직 주고받은 메시지가 없어요.</p>
                 )}
-                <div className="vomMiniHome__dmMessagesList">
+                <div
+                  className="vomMiniHome__dmMessagesList"
+                  ref={dmMessagesListRef}
+                  onScroll={handleDmMessagesScroll}
+                  onWheel={handleDmMessagesWheel}
+                >
                   {dmMessages.map((msg) => {
                     const isMine =
                       currentUserId &&

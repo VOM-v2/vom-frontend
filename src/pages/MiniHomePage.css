@@ -1,5 +1,6 @@
 .vomMiniHome {
   width: min(980px, 100%);
+  min-height: 620px;
   background: var(--vom-gray-0);
   border-radius: var(--vom-radius-xl);
   border: var(--vom-border);
@@ -904,7 +905,7 @@
   bottom: 16px;
   width: 380px;
   max-width: calc(100% - 32px);
-  max-height: 420px;
+  height: min(520px, calc(100vh - 96px));
   border-radius: var(--vom-radius-lg);
   border: 2px solid var(--vom-gray-300);
   background: var(--vom-gray-0);
@@ -941,8 +942,8 @@
 .vomMiniHome__dmBody {
   display: grid;
   grid-template-columns: 1.1fr 2fr;
-  min-height: 220px;
-  max-height: 360px;
+  min-height: 0;
+  height: 100%;
 }
 
 .vomMiniHome__dmRooms {
@@ -951,6 +952,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-height: 0;
 }
 
 .vomMiniHome__dmRoomsHeader {
@@ -965,6 +967,8 @@
   padding: 0;
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
   gap: 4px;
   overflow-y: auto;
 }
@@ -1015,6 +1019,7 @@
   padding: 8px;
   display: flex;
   flex-direction: column;
+  min-height: 0;
   gap: 6px;
 }
 
@@ -1027,6 +1032,7 @@
 
 .vomMiniHome__dmMessagesList {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
