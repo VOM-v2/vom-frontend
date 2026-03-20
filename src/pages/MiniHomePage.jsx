@@ -692,8 +692,9 @@ const MiniHomePage = () => {
       if (toSubscribe) subscribeToRoom(toSubscribe);
     };
 
-    client.onStompError = () => {
-      // ignore
+    client.onStompError = (frame) => {
+      console.error('연결 실패:', frame.headers['message']);
+      // 로그인 페이지로 리다이렉트 등
     };
     client.onWebSocketError = () => {
       // ignore
